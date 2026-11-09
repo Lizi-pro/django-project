@@ -1,0 +1,133 @@
+
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Cart | Blue Table</title>
+    <link rel="stylesheet" href="{% static 'menu/styles.css' %}">
+</head>
+<body>
+
+<!-- Navigation -->
+<header class="navbar">
+    <a class="logo" href="{% url 'menu' %}">Blue Table<span>.</span></a>
+    <nav class="nav-links">
+        <a href="{% url 'menu' %}">Menu</a>
+        <a href="{% url 'cart' %}" class="cart-link">My Cart</a>
+    </nav>
+</header>
+
+<!-- Header for Cart -->
+<main class="cart-container">
+    <div class="cart-heading">
+        <p class="cart-eyebrow">YOUR SELECTION</p>
+        <h1>My Cart</h1>
+        <p class="cart-description">Your favourite dishes, all in one place.</p>
+    </div>
+
+    {% if cart_items %}
+        <div class="cart-list">
+            {% for item in cart_items %}
+                <article class="cart-item">
+                <!-- Picture -->
+                    {% if item.image %}
+                        <img class="cart-product-image"
+                             src="{{ item.image }}"
+                             alt="{{ item.name }}">
+                    {% else %}
+                        <div class="cart-product-placeholder">🍽️</div>
+                    {% endif %}
+
+                <!-- Price -->
+                    <div class="cart-item-details">
+                        <h2>{{ item.name }}</h2>
+                        <p class="cart-unit-price">
+                            {{ item.price|floatformat:2 }} ₾
+                            <span>per item</span>
+                        </p>
+
+                    <!-- Update Quantity -->
+                        <form method="post"
+                              action="{% url 'update_cart' item.product_id %}">
+                            {% csrf_token %}
+                            <div class="quantity-controls">
+                                <label for="quantity-{{ item.product_id }}">Quantity</label>
+
+                                <button type="button"
+                                        class="step-btn"
+                                        onclick="changeQuantity('quantity-{{ item.product_id }}', -1)"
+                                        aria-label="Decrease quantity">−</button>
+
+                                <input id="quantity-{{ item.product_id }}"
+                                       type="number"
+                                       name="quantity"
+                                       value="{{ item.quantity }}"
+                                       min="1"
+                                       required>
+
+                                <button type="button"
+                                        class="step-btn"
+                                        onclick="changeQuantity('quantity-{{ item.product_id }}', 1)"
+                                        aria-label="Increase quantity">+</button>
+
+                                <button type="submit" class="update-btn">Update</button>
+                            </div>
+                        </form>
+                    </div>
+
+                <!-- Subtotal -->
+                    <div class="cart-item-end">
+                        <p class="subtotal-label">Subtotal</p>
+                        <p class="item-subtotal">
+                            {{ item.subtotal|floatformat:2 }} ₾
+                        </p>
+
+                <!-- Delete Product -->
+                        <form method="post"
+                              action="{% url 'delete_from_cart' item.product_id %}"
+                              onsubmit="return confirm('Remove this product from your cart?');">
+                            {% csrf_token %}
+                            <button type="submit" class="remove-btn">Remove</button>
+                        </form>
+                    </div>
+                </article>
+            {% endfor %}
+        </div>
+
+    <!-- Total Amount -->
+        <section class="cart-total">
+            <div>
+                <p class="total-caption">TOTAL AMOUNT</p>
+                <h2>{{ total|floatformat:2 }} ₾</h2>
+            </div>
+            <a href="{% url 'menu' %}" class="continue-btn">
+                Continue Shopping <span>→</span>
+            </a>
+        </section>
+
+    <!-- If Cart is Empty -->
+    {% else %}
+        <section class="empty-cart">
+            <div class="empty-cart-icon">🛍️</div>
+            <h2>Your cart is empty</h2>
+            <p>Discover something delicious on our menu.</p>
+            <a href="{% url 'menu' %}" class="continue-btn">Browse Menu →</a>
+        </section>
+    {% endif %}
+</main>
+
+<!-- Javascript for Quantity -->
+<script>
+    function changeQuantity(inputId, amount) {
+        const input = document.getElementById(inputId);
+        const current = parseInt(input.value, 10) || 1;
+        input.value = Math.max(1, current + amount);
+    }
+</script>
+
+</body>
+</html>
+
+

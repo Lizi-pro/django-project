@@ -1,0 +1,282 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Blue Table | Restaurant</title>
+
+    <link rel="stylesheet" href="{% static 'menu/styles.css' %}">
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+<nav class="navbar">
+    <a href="{% url 'menu' %}" class="logo">Blue Table<span>.</span></a>
+
+    <div class="nav-links">
+        <a href="#hero">Home</a>
+        <a href="#menu">Our Menu</a>
+        <a href="#about">About Us</a>
+        <a href="#contact">Contact</a>
+        <a href="{% url 'cart' %}" class="cart-link">My Cart</a>
+    </div>
+</nav>
+
+<header id="hero">
+    <div class="hero-content">
+        <p class="hero-subtitle">FRESH INGREDIENTS · GREAT TASTE</p>
+
+        <h1>Good Food.<br>Great Moments.</h1>
+
+        <p class="hero-description">
+            Discover delicious dishes made with fresh ingredients
+            and served with love.
+        </p>
+
+        <a href="#menu" class="cta-button">Explore Our Menu</a>
+    </div>
+</header>
+
+<main>
+
+    <!-- MENU SECTION -->
+    <section id="menu" class="menu-section">
+
+        <div class="section-heading">
+            <p class="section-subtitle">MADE FRESH FOR YOU</p>
+            <h2>Our Menu</h2>
+            <p>Find your next favorite dish.</p>
+        </div>
+
+        <form method="get" action="{% url 'menu' %}#menu" id="filter-form">
+
+            <div class="filters">
+
+                <!-- CATEGORY FILTERS -->
+                <div class="category-filters">
+
+                    <button
+                        type="button"
+                        class="category-btn {% if selected_category == 'all' or not selected_category %}active{% endif %}"
+                        data-category="all">
+                        All Dishes
+                    </button>
+
+                    {% for category in categories %}
+                        <button
+                            type="button"
+                            class="category-btn {% if selected_category == category.id|stringformat:'s' %}active{% endif %}"
+                            data-category="{{ category.id }}">
+                            {{ category.name }}
+                        </button>
+                    {% endfor %}
+
+                    <input
+                        type="hidden"
+                        name="category"
+                        id="selected-category"
+                        value="{{ selected_category|default:'all' }}">
+
+                </div>
+
+                <!-- OTHER FILTER OPTIONS -->
+                <div class="filter-options">
+
+                    <!-- SPICINESS -->
+                    <div class="spiciness-filter">
+
+                        <label for="spiciness">Maximum Spiciness</label>
+
+                        <div class="range-labels">
+                            <span>Mild</span>
+                            <span>Very Hot</span>
+                        </div>
+
+                        <input
+                            type="range"
+                            id="spiciness"
+                            name="spiciness"
+                            min="0"
+                            max="4"
+                            value="{{ selected_spiciness|default:4 }}">
+
+                        <span id="spiciness-value">{{ selected_spiciness|default:4 }}</span>
+
+                    </div>
+
+                    <!-- DIETARY FILTERS -->
+                    <div class="dietary-filters">
+
+                        <label>
+                            <input
+                                type="checkbox"
+                                name="nuts"
+                                id="nuts"
+                                value="true"
+                                {% if nuts_selected %}checked{% endif %}>
+                            Does Not Contain Nuts
+                        </label>
+
+                        <label>
+                            <input
+                                type="checkbox"
+                                name="vegetarian"
+                                id="vegetarian"
+                                value="true"
+                                {% if vegetarian_selected %}checked{% endif %}>
+                            Vegetarian
+                        </label>
+
+                    </div>
+
+                    <!-- APPLY AND RESET -->
+                    <div class="filter-buttons">
+
+                        <button type="submit" class="apply-btn">
+                            Apply Filters
+                        </button>
+
+                        <a href="{% url 'menu' %}#menu" class="reset-btn">
+                            Reset
+                        </a>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </form>
+
+        <!-- PRODUCT GRID -->
+        <div class="menu-grid">
+
+            {% for product in products %}
+
+                <article class="card">
+
+                    <img
+                        src="{{ product.image }}"
+                        alt="{{ product.name }}"
+                        loading="lazy">
+
+                    <div class="card-content">
+
+                        <h3>{{ product.name }}</h3>
+
+                        <div class="card-details">
+
+                            <span>
+                                🌶️ Spiciness: {{ product.spiciness }}/4
+                            </span>
+
+                            <span>
+                                🥜 Contains nuts:
+                                {{ product.nuts|yesno:"Yes,No" }}
+                            </span>
+
+                            <span>
+                                🌱 Vegetarian:
+                                {{ product.vegeterian|yesno:"Yes,No" }}
+                            </span>
+
+                        </div>
+
+                        <div class="card-footer">
+
+                            <span class="price">
+                                ₾{{ product.price|floatformat:2 }}
+                            </span>
+
+                            <form
+                                method="post"
+                                action="{% url 'add_to_cart' product.id %}">
+
+                                {% csrf_token %}
+
+                                <button type="submit" class="add-btn">
+                                    Add to Cart
+                                </button>
+
+                            </form>
+
+                        </div>
+
+                    </div>
+
+                </article>
+
+            {% empty %}
+
+                <p class="empty-message">
+                    No dishes match your filters.
+                </p>
+
+            {% endfor %}
+
+        </div>
+
+    </section>
+
+    <!-- ABOUT SECTION -->
+    <section id="about" class="about-section">
+
+        <p class="section-subtitle">OUR STORY</p>
+
+        <h2>Made with Care, Served with Love</h2>
+
+        <p>
+            At Blue Table, we believe that good food brings people together.
+            We focus on fresh ingredients, comforting flavors and memorable moments.
+        </p>
+
+    </section>
+
+</main>
+
+<!-- FOOTER -->
+<footer id="contact">
+
+    <a href="{% url 'menu' %}" class="logo">
+        Blue Table<span>.</span>
+    </a>
+
+    <p>Contact us: contact@bluetable.com</p>
+
+    <p class="copyright">
+        © 2026 Blue Table Restaurant. All rights reserved.
+    </p>
+
+</footer>
+
+<!-- JAVASCRIPT -->
+<script>
+    const categoryButtons = document.querySelectorAll(".category-btn");
+    const selectedCategory = document.getElementById("selected-category");
+    const filterForm = document.getElementById("filter-form");
+
+    const spiciness = document.getElementById("spiciness");
+    const spicinessValue = document.getElementById("spiciness-value");
+
+    // Update the selected category and submit the filters.
+    categoryButtons.forEach(button => {
+        button.addEventListener("click", () => {
+            selectedCategory.value = button.dataset.category;
+            filterForm.requestSubmit();
+        });
+    });
+
+    // Update the displayed spiciness value while moving the slider.
+    spiciness.addEventListener("input", () => {
+        spicinessValue.textContent = spiciness.value;
+    });
+</script>
+
+</body>
+</html>
+
+
+
+
