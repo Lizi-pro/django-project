@@ -1,246 +1,137 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import get_object_or_404, render, redirect
 from django.http import HttpResponse
-import requests
 from django.views.decorators.http import require_POST
+from django.contrib.auth import login, logout
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import AuthenticationForm
+from django.db import transaction
+
 from decimal import Decimal
 
-BASE_URL = "https://restaurant.stepprojects.ge/api"
-TIMEOUT = 15
-
-
-# API HELPER FUNCTIONS
-
-def api_get(endpoint, params=None):
-    response = requests.get(
-        f"{BASE_URL}/{endpoint}",
-        params=params,
-        timeout=TIMEOUT,
-    )
-    response.raise_for_status()
-    return response.json()
-
-
-def api_post(endpoint, data):
-    response = requests.post(
-        f"{BASE_URL}/{endpoint}",
-        json=data,
-        timeout=TIMEOUT,
-    )
-    response.raise_for_status()
-    return response
-
-
-def api_put(endpoint, data):
-    response = requests.put(
-        f"{BASE_URL}/{endpoint}",
-        json=data,
-        timeout=TIMEOUT,
-    )
-    response.raise_for_status()
-    return response
-
-
-def api_delete(endpoint):
-    response = requests.delete(
-        f"{BASE_URL}/{endpoint}",
-        timeout=TIMEOUT,
-    )
-    response.raise_for_status()
-    return response
-
-
-def api_error_message(error):
-    if error.response is not None:
-        return (
-            f"API error: {error.response.status_code}. "
-            f"{error.response.text}"
-        )
-
-    return str(error)
-
+from .forms import RegisterForm
+from .models import Category, Product, Basket, BasketItem
 
 
 # MENU PAGE
 
 def menu_view(request):
+
+    # კატეგორიები და პროდუქტები მოგვაქვს ჩვენი ბაზიდან
+    categories = Category.objects.all().order_by("id")
+    products = Product.objects.select_related("category").all()
+
+    # ფილტრების მნიშვნელობები URL-იდან
+    category_id = request.GET.get("category", "all")
+    spiciness = request.GET.get("spiciness", "4")
+    nuts = request.GET.get("nuts", "")
+    vegetarian = request.GET.get("vegetarian", "")
+
+    # სიმწარის მაქსიმალური დონის შემოწმება
     try:
-        categories = api_get("Categories/GetAll")
-        products = api_get("Products/GetAll")
+        max_spiciness = max(0, min(4, int(spiciness)))
+    except (TypeError, ValueError):
+        max_spiciness = 4
 
-        category_id = request.GET.get("category", "all")
-        spiciness = request.GET.get("spiciness", "4")
-        nuts = request.GET.get("nuts", "")
-        vegetarian = request.GET.get("vegetarian", "")
+    # პროდუქტების ფილტრაცია
+    products = products.filter(spiciness__lte=max_spiciness)
 
+    # კატეგორიის ფილტრი
+    if category_id not in ("", "all"):
         try:
-            max_spiciness = max(0, min(4, int(spiciness)))
+            products = products.filter(category_id=int(category_id))
         except (TypeError, ValueError):
-            max_spiciness = 4
+            category_id = "all"
 
-        filtered_products = []
+    # თხილის არქონის ფილტრი
+    if nuts == "true":
+        products = products.filter(nuts=False)
 
-        for product in products:
+    # ვეგეტარიანული პროდუქტების ფილტრი
+    if vegetarian == "true":
+        products = products.filter(vegetarian=True)
 
-            # Filter by category
-            if (
-                category_id not in ("", "all")
-                and str(product.get("categoryId")) != category_id
-            ):
-                continue
+    context = {
+        "categories": categories,
+        "products": products,
+        "selected_category": category_id,
+        "selected_spiciness": max_spiciness,
+        "nuts_selected": nuts == "true",
+        "vegetarian_selected": vegetarian == "true",
+    }
 
-            # Filter by spiciness
-            try:
-                product_spiciness = int(product.get("spiciness", 0))
-            except (TypeError, ValueError):
-                product_spiciness = 0
-
-            if product_spiciness > max_spiciness:
-                continue
-
-            # Filter by nuts
-            if nuts == "true" and product.get("nuts", False):
-                continue
-
-            # Filter by vegetarian options
-            if (
-                vegetarian == "true"
-                and not product.get("vegeterian", False)
-            ):
-                continue
-
-            filtered_products.append(product)
-
-        context = {
-            "categories": categories,
-            "products": filtered_products,
-            "selected_category": category_id,
-            "selected_spiciness": max_spiciness,
-            "nuts_selected": nuts == "true",
-            "vegetarian_selected": vegetarian == "true",
-        }
-
-        return render(request, "menu/index.html", context)
-
-    except (requests.RequestException, ValueError) as error:
-        return HttpResponse(
-            f"Could not load the restaurant menu: {error}",
-            status=502,
-        )
-
+    return render(request, "menu/index.html", context)
 
 
 # ADD PRODUCT TO CART
 
+@login_required(login_url="login")
 @require_POST
 def add_to_cart_view(request, product_id):
-    try:
-        products = api_get("Products/GetAll")
 
-        product = next(
-            (
-                item
-                for item in products
-                if int(item["id"]) == product_id
-            ),
-            None,
-        )
+    product = get_object_or_404(Product, id=product_id)
 
-        if product is None:
-            return HttpResponse("Product not found.", status=404)
+    # ვპოულობთ მომხმარებლის კალათას ან ვქმნით ახალს
+    basket, created = Basket.objects.get_or_create(user=request.user)
 
-        basket = api_get("Baskets/GetAll")
+    # ვამოწმებთ, არის თუ არა პროდუქტი უკვე კალათაში
+    basket_item, created = BasketItem.objects.get_or_create(
+        basket=basket,
+        product=product,
+        defaults={
+            "quantity": 1,
+            "price": product.price,
+        }
+    )
 
-        existing_item = next(
-            (
-                item
-                for item in basket
-                if int((item.get("product") or {}).get("id", -1)) == product_id
-            ),
-            None,
-        )
+    # თუ პროდუქტი უკვე არსებობდა, რაოდენობას ვზრდით
+    if not created:
+        basket_item.quantity += 1
+        basket_item.save(update_fields=["quantity"])
 
-        if existing_item:
-            new_quantity = int(existing_item.get("quantity", 1)) + 1
-
-            api_put(
-                "Baskets/UpdateBasket",
-                {
-                    "productId": product_id,
-                    "quantity": new_quantity,
-                    "price": product["price"],
-                },
-            )
-
-        else:
-            api_post(
-                "Baskets/AddToBasket",
-                {
-                    "productId": product_id,
-                    "quantity": 1,
-                    "price": product["price"],
-                },
-            )
-
-        return redirect("cart")
-
-    except (requests.RequestException, ValueError, TypeError) as error:
-        return HttpResponse(
-            f"Could not add the product to the cart: "
-            f"{api_error_message(error) if isinstance(error, requests.RequestException) else error}",
-            status=502,
-        )
-
+    return redirect("cart")
 
 
 # CART PAGE
 
+@login_required(login_url="login")
 def cart_view(request):
-    try:
-        basket = api_get("Baskets/GetAll")
 
-        cart_items = []
-        total = Decimal("0.00")
+    # მხოლოდ მიმდინარე მომხმარებლის კალათა
+    basket = Basket.objects.filter(user=request.user).first()
 
-        for item in basket:
-            product = item.get("product") or {}
+    cart_items = []
+    total = Decimal("0.00")
 
-            quantity = int(item.get("quantity", 1))
+    if basket:
+        items = basket.items.select_related("product").all()
 
-            price = Decimal(str(item.get("price", product.get("price", 0))))
-
-            subtotal = price * quantity
+        for item in items:
+            subtotal = item.price * item.quantity
             total += subtotal
 
-            cart_items.append(
-                {
-                    "product_id": product.get("id"),
-                    "name": product.get("name", "Product"),
-                    "image": product.get("image", ""),
-                    "price": price,
-                    "quantity": quantity,
-                    "subtotal": subtotal,
-                }
-            )
+            cart_items.append({
+                "product_id": item.product.id,
+                "name": item.product.name,
+                "image": item.product.image,
+                "price": item.price,
+                "quantity": item.quantity,
+                "subtotal": subtotal,
+            })
 
-        context = {
-            "cart_items": cart_items,
-            "total": total,
-        }
+    context = {
+        "cart_items": cart_items,
+        "total": total,
+    }
 
-        return render(request, "menu/cart.html", context)
-
-    except (requests.RequestException, ValueError, TypeError,) as error:
-        return HttpResponse(
-            f"Could not load the cart: {error}",
-            status=502,
-        )
-
+    return render(request, "menu/cart.html", context)
 
 
 # UPDATE CART QUANTITY
 
+@login_required(login_url="login")
 @require_POST
 def update_cart_view(request, product_id):
+
     try:
         quantity = int(request.POST.get("quantity", "1"))
 
@@ -250,59 +141,96 @@ def update_cart_view(request, product_id):
                 status=400,
             )
 
-        products = api_get("Products/GetAll")
-
-        product = next(
-            (
-                item
-                for item in products
-                if int(item["id"]) == product_id
-            ),
-            None,
-        )
-
-        if product is None:
-            return HttpResponse("Product not found.", status=404)
-
-        api_put(
-            "Baskets/UpdateBasket",
-            {
-                "productId": product_id,
-                "quantity": quantity,
-                "price": product["price"],
-            },
-        )
-
-        return redirect("cart")
-
     except (ValueError, TypeError):
         return HttpResponse(
             "Invalid quantity.",
             status=400,
         )
 
-    except requests.RequestException as error:
-        return HttpResponse(
-            f"Could not update the cart: {api_error_message(error)}",
-            status=502,
-        )
+    basket = get_object_or_404(Basket, user=request.user)
 
+    # ვეძებთ პროდუქტს მხოლოდ ამ მომხმარებლის კალათაში
+    basket_item = get_object_or_404(
+        BasketItem,
+        basket=basket,
+        product_id=product_id,
+    )
+
+    basket_item.quantity = quantity
+    basket_item.save(update_fields=["quantity"])
+
+    return redirect("cart")
 
 
 # DELETE PRODUCT FROM CART
 
+@login_required(login_url="login")
 @require_POST
 def delete_from_cart_view(request, product_id):
-    try:
-        api_delete(f"Baskets/DeleteProduct/{product_id}")
 
-        return redirect("cart")
+    basket = get_object_or_404(Basket, user=request.user)
 
-    except requests.RequestException as error:
-        return HttpResponse(
-            f"Could not remove the product: "
-            f"{api_error_message(error)}",
-            status=502,
-        )
+    # წაიშლება მხოლოდ მიმდინარე მომხმარებლის კალათიდან
+    basket_item = get_object_or_404(
+        BasketItem,
+        basket=basket,
+        product_id=product_id,
+    )
+
+    basket_item.delete()
+
+    return redirect("cart")
 
 
+# USER REGISTRATION
+
+def register_view(request):
+
+    if request.user.is_authenticated:
+        return redirect("menu")
+
+    if request.method == "POST":
+        form = RegisterForm(request.POST)
+
+        if form.is_valid():
+            user = form.save()
+            login(request, user)
+
+            return redirect("menu")
+
+    else:
+        form = RegisterForm()
+
+    return render(request, "menu/register.html", {"form": form})
+
+
+# USER LOGIN
+
+def login_view(request):
+
+    if request.user.is_authenticated:
+        return redirect("menu")
+
+    if request.method == "POST":
+        form = AuthenticationForm(request, data=request.POST)
+
+        if form.is_valid():
+            user = form.get_user()
+            login(request, user)
+
+            return redirect("menu")
+
+    else:
+        form = AuthenticationForm()
+
+    return render(request, "menu/login.html", {"form": form})
+
+
+# USER LOGOUT
+
+def logout_view(request):
+
+    if request.method == "POST":
+        logout(request)
+
+    return redirect("menu")

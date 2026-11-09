@@ -1,0 +1,74 @@
+
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | Blue Table</title>
+
+    <link rel="stylesheet" href="{% static 'menu/styles.css' %}">
+
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="auth-page">
+
+    <div class="auth-container">
+
+        <a href="{% url 'menu' %}" class="auth-brand">
+            Blue Table
+        </a>
+
+        <div class="auth-card">
+
+            <div class="auth-heading">
+                <p class="auth-subtitle">WELCOME BACK</p>
+                <h1>Sign In</h1>
+                <p>Log in to continue your experience.</p>
+            </div>
+
+            <form method="POST" class="auth-form">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                    <div class="auth-error">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
+
+                <div class="auth-field">
+                    <label for="{{ form.username.id_for_label }}">Username</label>
+                    {{ form.username }}
+                    {% for error in form.username.errors %}
+                        <p class="field-error">{{ error }}</p>
+                    {% endfor %}
+                </div>
+
+                <div class="auth-field">
+                    <label for="{{ form.password.id_for_label }}">Password</label>
+                    {{ form.password }}
+                    {% for error in form.password.errors %}
+                        <p class="field-error">{{ error }}</p>
+                    {% endfor %}
+                </div>
+
+                <button type="submit" class="auth-button">
+                    Sign In
+                </button>
+            </form>
+
+            <div class="auth-footer">
+                Don't have an account?
+                <a href="{% url 'register' %}">Create Account</a>
+            </div>
+
+        </div>
+
+        <a href="{% url 'menu' %}" class="auth-back">
+            ← Back to Menu
+        </a>
+
+    </div>
+
+</body>
+</html>
