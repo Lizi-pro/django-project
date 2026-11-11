@@ -2,13 +2,13 @@ from django.contrib import admin
 from .models import Category, Product, Basket, BasketItem
 
 
-@admin.register(Category)
+@admin.register(Category)             # Category მოდელის რეგისტრაცია Django Admin-ში
 class CategoryAdmin(admin.ModelAdmin):
     list_display = ("id", "name")
     search_fields = ("name",)
 
 
-@admin.register(Product)
+@admin.register(Product)                   # Product მოდელის რეგისტრაცია Django Admin-ში
 class ProductAdmin(admin.ModelAdmin):
     list_display = (
         "id",
@@ -24,5 +24,5 @@ class ProductAdmin(admin.ModelAdmin):
     search_fields = ("name",)
 
 
-admin.site.register(Basket)
+admin.site.register(Basket)            # კალათებისა და კალათის პროდუქტების რეგისტრაცია Admin-ში
 admin.site.register(BasketItem)
